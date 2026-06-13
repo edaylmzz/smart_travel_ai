@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'favorites_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:android_intent_plus/android_intent.dart';
 
 void main() {
   runApp(const MyApp());
@@ -32,6 +33,15 @@ class TravelPage extends StatefulWidget {
 }
 
   class _TravelPageState extends State<TravelPage> {
+
+  String? selectedStartPoint;
+
+  final List<String> startPointOptions = [
+    "Şehir Merkezi",
+    "Otogar",
+    "Tren Garı",
+    "Havalimanı",
+  ];
 
     @override
 void initState() {
@@ -61,8 +71,8 @@ void initState() {
   "Bursa","Çanakkale","Çankırı","Çorum","Denizli",
   "Diyarbakır","Düzce","Edirne","Elazığ","Erzincan",
   "Erzurum","Eskişehir","Gaziantep","Giresun","Gümüşhane",
-  "Hakkari","Hatay","Iğdır","Isparta","İstanbul",
-  "İzmir","Kahramanmaraş","Karabük","Karaman","Kars",
+  "Hakkari","Hatay","Iğdır","Isparta","İstanbul Avrupa Yakası ",
+  "İstanbul Anadolu Yakası ","İzmir","Kahramanmaraş","Karabük","Karaman","Kars",
   "Kastamonu","Kayseri","Kırıkkale","Kırklareli","Kırşehir",
   "Kilis","Kocaeli","Konya","Kütahya","Malatya",
   "Manisa","Mardin","Mersin","Muğla","Muş",
@@ -132,6 +142,7 @@ int getTravelDayCount() {
   Future<void> sendRequest() async {
     if (
   selectedCity.isEmpty ||
+  selectedStartPoint == null ||
   selectedInterest == null ||
   selectedDateRange == null
 ) {
@@ -200,14 +211,12 @@ int getTravelDayCount() {
 
     try {
       final weatherUrl = Uri.parse(
-  "https://api.openweathermap.org/data/2.5/forecast?q=$selectedCity,tr&appid=YOUR_OPENWEATHER_API_KEY",
-);
+  "https://api.openweathermap.org/data/2.5/forecast?q=$selectedCity,tr&appid=YOUR_OPENWEATHER_API_KEY");
 
 final weatherResponse = await http.get(weatherUrl);
 
 if (weatherResponse.statusCode == 200) {
   final weatherData = jsonDecode(weatherResponse.body);
-
   final List forecastList = weatherData["list"];
 
   final int travelDays = getTravelDayCount();
@@ -218,11 +227,30 @@ if (weatherResponse.statusCode == 200) {
   for (int i = 0; i < maxDays; i++) {
     final item = forecastList[i * 8];
 
-    final temp = item["main"]["temp"];
-    final description = item["weather"][0]["description"];
+    final temp = (item["main"]["temp"] - 273.15).round();
+    String description = item["weather"][0]["description"];
+
+    if (description == "clear sky") {
+      description = "Açık Hava";
+    } else if (description == "few clouds") {
+      description = "Az Bulutlu";
+    } else if (description == "scattered clouds") {
+      description = "Parçalı Bulutlu";
+    } else if (description == "broken clouds") {
+      description = "Bulutlu";
+    } else if (description == "overcast clouds") {
+      description = "Kapalı Bulutlu";
+    } else if (description.contains("rain")) {
+      description = "Yağmurlu";
+    } else if (description.contains("snow")) {
+      description = "Karlı";
+    } else if (description.contains("mist") ||
+        description.contains("fog")) {
+      description = "Sisli";
+    }
 
     dailyWeather.add(
-      "${i + 1}. Gün: $temp derece, $description",
+      "${i + 1}. Gün: ${temp}°C, $description",
     );
   }
 
@@ -236,7 +264,11 @@ if (weatherResponse.statusCode == 200) {
 } else {
   weatherInfo = "Hava durumu alınamadı";
 }
+
       final url = Uri.parse("https://api.groq.com/openai/v1/chat/completions");
+
+     final String startLocation =
+    "$selectedCity ${selectedStartPoint ?? "Şehir Merkezi"}";
 
       final response = await http
           .post(
@@ -244,17 +276,22 @@ if (weatherResponse.statusCode == 200) {
             headers: {
               "Content-Type": "application/json",
               "Authorization": "Bearer YOUR_GROQ_API_KEY",
-            },
+            }
             body: jsonEncode({
               "model": "llama-3.3-70b-versatile",
               "messages": [
                 {
                   "role": "user",
-                   "content": """
+                  
+                   "content": """)
+                   
 Sen Türkiye şehirlerini bilen profesyonel bir seyahat rehberisin.
 
+Kullanıcının başlangıç noktası:
+$startLocation
+
 Görev:
-Kullanıcının seçtiği şehir, ilgi alanı, süre ve hava durumuna göre gezi planı oluştur.
+Kullanıcının seçtiği şehir, ilgi alanı, süre, başlangıç noktası ve hava durumuna göre detaylı bir gezi planı oluştur.
 
 Kullanıcı Bilgileri:
 Şehir: $selectedCity
@@ -263,42 +300,94 @@ Süre: ${selectedDay!}
 Hava Durumu: $weatherInfo
 
 Kesin Kurallar:
-- Sadece gerçek ve popüler mekanları öner.
-- Uydurma mekan yazma.
-- Mekanlar sadece seçilen şehirde olsun.
-- Başka şehirden mekan yazma.
-- Google Maps'te bulunabilecek bilinen yerleri seç.
-- Aynı mekanı tekrar etme.
-- Hava durumunu dikkate al.
-- Yağmurluysa kapalı mekanları önceliklendir.
-- Güneşliyse açık hava mekanlarını da ekle.
-- Giriş cümlesi yazma.
-- Emoji ve markdown kullanma.
+
+* Sadece gerçek ve popüler mekanları öner.
+* Uydurma mekan yazma.
+* Mekanlar sadece seçilen şehirde olsun.
+* Başka şehirden mekan yazma.
+* Google Maps'te bulunabilecek bilinen yerleri seç.
+* Aynı mekanı tekrar etme.
+* Hava durumunu dikkate al.
+* Yağmurluysa kapalı mekanları önceliklendir.
+* Güneşliyse açık hava mekanlarını da ekle.
+* Giriş veya sonuç cümlesi yazma.
+* Sadece istenen formatta çıktı ver.
+
+Ulaşım Kuralları:
+
+* Başlangıç noktasından ilk durağa nasıl gidileceğini yaz.
+* Her durak arasında ulaşım bilgisi ver.
+* Her ulaşım bilgisinde iki alternatif göster:
+
+  1. En kısa süreli ulaşım
+  2. En az araç kullanılan ulaşım
+* Süreleri yaklaşık olarak dakika cinsinden belirt.
+* Uygun durumlarda yürüyüş, metro, tramvay, otobüs, minibüs veya taksi seçeneklerini kullan.
+- En az araç kullanılan ulaşım seçeneğinde aktarma sayısını en aza indir.
+- Taksi tek araç olarak kabul edilir.
+- Yürüyüş gerekiyorsa belirt.
+- Ulaşım alternatifleri gerçekçi ve mantıklı olsun.
 
 Süre Kuralları:
-- Yarım Gün: 1 gün yaz, toplam 2 durak öner.
-- 1 Gün: 1 gün yaz, toplam 4 durak öner.
-- 2 Gün: 2 gün yaz, her gün 3 durak öner.
-- 3 Gün: 3 gün yaz, her gün 3 durak öner.
-- 4 Gün: 4 gün yaz, her gün 3 durak öner.
-- 5 Gün: 5 gün yaz, her gün 3 durak öner.
-- 1 Hafta: 7 gün yaz, her gün 2 veya 3 durak öner.
 
-Formatı bozma:
+* Yarım Gün: 1 gün yaz, toplam 2 durak öner.
+* 1 Gün: 1 gün yaz, toplam 4 durak öner.
+* 2 Gün: 2 gün yaz, her gün 3 durak öner.
+* 3 Gün: 3 gün yaz, her gün 3 durak öner.
+* 4 Gün: 4 gün yaz, her gün 3 durak öner.
+* 5 Gün: 5 gün yaz, her gün 3 durak öner.
+* 1 Hafta: 7 gün yaz, her gün 2 veya 3 durak öner.
+
+Formatı kesinlikle bozma:
 
 1. Gün
 
-Durak 1: Yer adı
-Saat: 09:00 - 10:00
-Ulaşım: Yürüyerek / Metro / Tramvay / Otobüs
-Not: Tek kısa cümle
+Başlangıç Noktası: $startLocation
 
-Durak 2: Yer adı
+İlk Durağa Ulaşım
+Kısa: ...
+Az araç: ...
+
+Durak 1
+Yer: ...
+Saat: 09:00 - 10:00
+Kısa ulaşım: ...
+Az araç: ...
+Not: ...
+
+Durak 2
+Yer: ...
 Saat: 10:30 - 11:30
-Ulaşım: Yürüyerek
-Not: Tek kısa cümle
+Kısa ulaşım: ...
+Az araç: ...
+Not: ...
+
+Durak 3
+Yer: ...
+Saat: 12:00 - 13:00
+Kısa ulaşım: ...
+Az araç: ...
+Not: ...
+
+Görsel düzen kuralları:
+- Her durak arasında bir boş satır bırak.
+- Ulaşım cümlelerini kısa tut.
+- Not kısmı en fazla 1 kısa cümle olsun.
+Not kısmında mekanın en dikkat çekici özelliğini yaz.
+"tarihi yer", "alışveriş yeri" gibi genel ifadeler kullanma.
+- Uzun açıklama yazma.
+- Gereksiz tekrar yapma.
+
+Ulaşım Kuralları:
+
+- Sadece şu ulaşım türlerini kullan:
+Yürüyerek, Otobüs, Metro, Tramvay, Minibüs, Taksi.
+
+- walked_distance, walking, driving, transit gibi İngilizce ifadeler kullanma.
+- Tüm ulaşım bilgileri Türkçe yazılmalı.
+- "walked_distance" ifadesini ASLA kullanma.
+- Yürüyüş gerekiyorsa "Yürüyerek" yaz.
 """
-            
                 }
             ],
               "stream": false
@@ -388,17 +477,20 @@ setState(() {
   );
 }
   }
-  Future<void> openMap() async {
+ 
+Future<void> openMap() async {
   final query = Uri.encodeComponent("$selectedCity gezilecek yerler");
-  final url = Uri.parse("https://www.google.com/maps/search/?api=1&query=$query");
 
-  if (await canLaunchUrl(url)) {
-    await launchUrl(
-      url,
-      mode: LaunchMode.inAppBrowserView,
-    );
-  }
+  final url = Uri.parse(
+    "https://maps.google.com/?q=$query",
+  );
+
+  await launchUrl(
+    url,
+    mode: LaunchMode.inAppBrowserView,
+  );
 }
+
 
   Widget buildDropdown({
     required IconData icon,
@@ -783,6 +875,19 @@ Future<void> pickTravelDateRange() async {
                       const SizedBox(height: 18),
 
                       buildDropdown(
+                      icon: Icons.location_on,
+                      title: "Başlangıç Noktası",
+                      value: selectedStartPoint,
+                      items: startPointOptions,
+                      onChanged: (value) {
+                        setState(() {
+                          selectedStartPoint = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 18),
+
+                      buildDropdown(
                         icon: Icons.favorite_rounded,
                         title: "İlgi Alanı Seç",
                         value: selectedInterest,
@@ -1112,19 +1217,19 @@ List<String> getDaySections() {
 String getMapQuery() {
   final lines = routeText.split('\n');
 
-  final stops = lines
-      .where((line) => line.trim().startsWith("Durak"))
-      .map((line) {
-        return line
-            .replaceAll(RegExp(r'Durak\s+\d+:'), '')
-            .trim();
-      })
+  final places = lines
+      .where((line) => line.trim().startsWith("Yer:"))
+      .map((line) => line.replaceFirst("Yer:", "").trim())
       .where((place) => place.isNotEmpty)
-      .take(5)
-      .join(" ");
+      .toList();
 
-  return "$city $stops";
+  if (places.isEmpty) {
+    return "$city gezilecek yerler";
+  }
+
+  return "$city ${places.join(" ")}";
 }
+
 Future<void> saveFavorite(BuildContext context) async {
   final prefs = await SharedPreferences.getInstance();
 
@@ -1345,17 +1450,22 @@ const SizedBox(height: 18),
                             const SizedBox(height: 14),
 
                             Text(
-                              dayText.replaceFirst(
-                                RegExp(r'\d+\.\s*Gün'),
-                                "",
-                              ).trim(),
-                              style: const TextStyle(
-                                fontSize: 15,
-                                height: 1.6,
-                                color:
-                                    Color(0xFF312942),
-                              ),
+                              dayText
+                              .replaceFirst(RegExp(r'\d+\.\s*Gün'), "")
+                              .replaceAll("Durak", "\n📍 Durak")
+                              .replaceAll("Yer:", "🏛️ Yer:")
+                              .replaceAll("Saat:", "🕒 Saat:")
+                              .replaceAll("Kısa ulaşım:", "🚶 Kısa ulaşım:")
+                              .replaceAll("Az araç:", "🚕 Az araç:")
+                              .replaceAll("Not:", "📝 Not:")
+                              .trim(),
+                            style: const TextStyle(
+                            fontSize: 15,
+                            height: 1.7,
+                            color: Color(0xFF312942),
+                            fontWeight: FontWeight.w500,
                             ),
+                          ),
                           ],
                         ),
                       );
@@ -1367,18 +1477,18 @@ SizedBox(
   width: double.infinity,
   height: 54,
   child: OutlinedButton.icon(
-    onPressed: () async {
-      final query = Uri.encodeComponent(getMapQuery());
+   onPressed: () async {
 
-      final url = Uri.parse(
-        "https://www.google.com/maps/search/?api=1&query=$query",
-      );
+  final query = "${getMapQuery()} Türkiye Türkçe";
 
-        await launchUrl(
-          url,
-          mode: LaunchMode.externalApplication,
-        );
-      },
+  final intent = AndroidIntent(
+    action: 'action_view',
+    data: 'geo:0,0?q=${Uri.encodeComponent(query)}&hl=tr',
+    package: 'com.google.android.apps.maps',
+  );
+
+  await intent.launch();
+},
      
     style: OutlinedButton.styleFrom(
       side: const BorderSide(
