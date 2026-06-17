@@ -6,6 +6,7 @@ import 'favorites_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:android_intent_plus/android_intent.dart';
+import '../config/api_keys.dart';
 
 void main() {
   runApp(const MyApp());
@@ -210,8 +211,10 @@ int getTravelDayCount() {
 );
 
     try {
+      
       final weatherUrl = Uri.parse(
-  "https://api.openweathermap.org/data/2.5/forecast?q=$selectedCity,tr&appid=YOUR_OPENWEATHER_API_KEY");
+  "https://api.openweathermap.org/data/2.5/forecast?q=${Uri.encodeComponent(selectedCity.trim())}&appid=${ApiKeys.openWeatherApiKey}&units=metric&lang=tr",
+);
 
 final weatherResponse = await http.get(weatherUrl);
 
@@ -227,7 +230,7 @@ if (weatherResponse.statusCode == 200) {
   for (int i = 0; i < maxDays; i++) {
     final item = forecastList[i * 8];
 
-    final temp = (item["main"]["temp"] - 273.15).round();
+    final temp = (item["main"]["temp"]).round();
     String description = item["weather"][0]["description"];
 
     if (description == "clear sky") {
@@ -265,25 +268,25 @@ if (weatherResponse.statusCode == 200) {
   weatherInfo = "Hava durumu alınamadı";
 }
 
-      final url = Uri.parse("https://api.groq.com/openai/v1/chat/completions");
+      final groqUrl = Uri.parse("https://api.groq.com/openai/v1/chat/completions");
 
      final String startLocation =
     "$selectedCity ${selectedStartPoint ?? "Şehir Merkezi"}";
 
       final response = await http
           .post(
-            url,
+             groqUrl,
             headers: {
               "Content-Type": "application/json",
-              "Authorization": "Bearer YOUR_GROQ_API_KEY",
-            }
+              "Authorization": "Bearer ${ApiKeys.groqApiKey}",
+             },
             body: jsonEncode({
               "model": "llama-3.3-70b-versatile",
               "messages": [
                 {
                   "role": "user",
                   
-                   "content": """)
+                   "content": """
                    
 Sen Türkiye şehirlerini bilen profesyonel bir seyahat rehberisin.
 
